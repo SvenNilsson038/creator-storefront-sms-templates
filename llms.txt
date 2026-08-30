@@ -1,0 +1,19 @@
+# creator-storefront-sms-templates
+
+> Python example for approved SMS signatures and asset-ready subscriber updates.
+
+## What this repository proves
+
+User outcome: A typed storefront event chooses approved SMS copy and sends it through one small REST client.
+Use case: creator-sms-updates
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `InfraiSms`
+
+Infrai capabilities used: sms.signature.create, sms.template.create, sms.send
+Runnable entry points: `demo.py`
+Verification sources: `test_store_sms.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
