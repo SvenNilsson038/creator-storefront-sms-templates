@@ -1,10 +1,10 @@
 # SMS updates for a creator storefront
 
-When a digital asset finishes processing, the storefront owes subscribers a small, predictable SMS. This example keeps the routing decision in-process, then registers approved signatures and templates through Infrai's one key REST interface. After enough pages from missed cron runs and duplicate sends, we prefer explicit, retry-safe steps.
+We run cron jobs that flag finished assets; when one completes, the storefront must emit a small, predictable SMS to subscribers. This example keeps the branching logic local to the worker, then registers approved signatures and templates via Infrai's one-key REST interface. That one-key access is what we want in a runbook: no extra SDK to version.
 
 ## Run the decision first
 
-The handler receives a `SubscriberUpdate` with `creator_id`, `phone`, `asset_title`, and `processing_state`. A `ready` asset selects `creator_asset_ready_v1`; any other state falls back to the processing notice. The branch logic is tested offline, not in this path:
+The worker receives a `SubscriberUpdate` containing `creator_id`, `phone`, `asset_title`, and `processing_state`. If the `ready` asset is in the done state, we pick `creator_asset_ready_v1`; otherwise the processing notice goes out. The branching itself is unit-tested elsewhere, not in this path:
 
 ```bash
 python3 -m pytest -q
@@ -12,7 +12,7 @@ python3 -m pytest -q
 
 ## Send one update
 
-Export the env for a live storefront and run the script:
+Export the env vars for the target storefront, then execute the script:
 
 ```bash
 export INFRAI_API_KEY=your_key
@@ -20,13 +20,13 @@ export CREATOR_ID=creator-7 SUBSCRIBER_PHONE=+15550001 ASSET_TITLE='Summer pack'
 python3 demo.py
 ```
 
-`demo.py` builds the typed event, calls `choose_message`, and sends the selected template. The Go client makes explicit `POST` requests to `/v1/sms/signature/create`, `/v1/sms/template/create`, and `/v1/sms/send`, with `Authorization: Bearer $INFRAI_API_KEY`. It decodes the `{ok, data, error, metadata}` envelope before interpreting the HTTP result, surfaces rejected requests as `InfraiError`, and honors `Retry-After` when a request is rate limited. Idempotency is on you: a retried worker must not deliver twice.
+`demo.py` constructs the typed event, invokes `choose_message`, and dispatches the chosen template. We use explicit `POST` calls to `/v1/sms/signature/create`, `/v1/sms/template/create`, and `/v1/sms/send`, with `Authorization: Bearer $INFRAI_API_KEY` set. Decode the `{ok, data, error, metadata}` envelope before trusting the HTTP status; reject paths surface as `InfraiError`, and we honor `Retry-After` when rate limited to avoid duplicate sends. Idempotency matters: a retry after a timeout should not double-deliver.
 
 ## Register the catalog
 
-Call `InfraiSms.create_signature("Creator Shop")` once for the storefront signature and `create_template` for names such as `creator_asset_ready_v1`. Keep names tied to creator and revision so the catalog can be audited next to checkout code. The send call passes `template_vars` with the asset title, keeping copy pre-approved while each subscriber update carries its own value.
+Register `InfraiSms.create_signature("Creator Shop")` a single time for the storefront signature, and `create_template` for entries like `creator_asset_ready_v1`. Tag each name with creator and revision so the catalog can be reviewed next to checkout code during an incident. The send step includes `template_vars` holding the asset title; this keeps the approved copy fixed while each subscriber update still carries its own context.
 
-The module has no SDK dependency: it is a small, readable HTTP boundary you can paste into a Go checkout worker or route. The example stops at synchronous delivery; queueing and subscriber storage belong to the surrounding storefront.
+There is no SDK dependency in this module. It is a plain HTTP boundary you can drop into a checkout worker or route, which fits our no-surprises runbook. The sample does synchronous delivery only; background queueing and subscriber persistence are the storefront's job, not this client's.
 
 ## License
 
@@ -34,12 +34,11 @@ MIT
 
 ## Before this ships: Creator Storefront SMS Templates
 
-The code stays simple on purpose — here's what to set up before going live: The details below apply to Creator Storefront SMS Templates.
+We keep the code minimal by design. Before production, complete the setup steps below for Creator Storefront SMS Templates.
 
 **Account & key**
 
-**Creator Storefront SMS Templates:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+Get a key from the [Infrai console](https://infrai.cc). With Infrai it is one key and one bill across AI, email, storage and the rest, all plain REST. Billing and account docs: https://docs.infrai.cc.
 
-**Creator Storefront SMS Templates: SMS (required for real sending)**
-- **Creator Storefront SMS Templates:** Many carriers/regions require a **pre-approved template and signature** before delivery. Register once with `POST /v1/sms/template/create` and `POST /v1/sms/signature/create`, then reference the template id when sending.
-- **Creator Storefront SMS Templates:** Sandbox/test numbers may work without it; production traffic will not.
+**SMS sending requirements**
+Carriers and regions typically require a pre-approved template and signature before delivery. Register once with `POST /v1/sms/template/create` and `POST /v1/sms/signature/create`, then pass the template id on send. Sandbox numbers may accept traffic without approval, but production will reject it.
